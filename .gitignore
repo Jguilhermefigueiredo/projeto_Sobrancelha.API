@@ -1,0 +1,47 @@
+# =====================
+# Build (.NET)
+# =====================
+bin/
+obj/
+
+# =====================
+# Visual Studio
+# =====================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# =====================
+# Visual Studio Code
+# =====================
+.vscode/
+
+# =====================
+# JetBrains Rider
+# =====================
+.idea/
+
+# =====================
+# NuGet
+# =====================
+packages/
+*.nupkg
+
+# =====================
+# Logs
+# =====================
+*.log
+
+# =====================
+# Testes
+# =====================
+TestResults/
+
+# =====================
+# Sistema Operacional
+# =====================
+.DS_Store
+Thumbs.db
+Models/shape_predictor_68_face_landmarks.dat

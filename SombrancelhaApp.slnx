@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SombrancelhaApp.Api/SombrancelhaApp.Api.csproj" />
+  <Project Path="SombrancelhaApp.Tests/SombrancelhaApp.Tests.csproj" />
+</Solution>

@@ -1,0 +1,28 @@
+### Variáveis globais
+@hostname = localhost
+@port = 5043
+@host = http://{{hostname}}:{{port}}
+@clienteId = 77d51dac-6c9a-4ff0-95f0-2c73bcfb2c53
+
+### 1. Upload da Imagem para o Cliente
+# o nome do campo deve ser "Imagem" (com I maiúsculo) conforme DTO
+### 1. Upload da Imagem para o Cliente
+POST {{host}}/clientes/{{clienteId}}/imagem
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="Imagem"; filename="rosto_teste.jpg"
+Content-Type: image/jpeg
+
+< C:/Users/joseg/Documents/Projetos/sombrancelha-app/SombrancelhaApp.Api/rosto_teste.jpg
+--boundary--
+
+
+### 2. Processamento (OpenCV)
+# Após rodar o passo 1, pegue o ID da imagem retornado e substitua abaixo
+@imagemId = a4391de3-f338-45b9-8a5a-69f595e9619e
+
+POST {{host}}/clientes/77d51dac-6c9a-4ff0-95f0-2c73bcfb2c53/imagem/a4391de3-f338-45b9-8a5a-69f595e9619e/detectar-sobrancelha
+Content-Type: application/json
+
+{}
