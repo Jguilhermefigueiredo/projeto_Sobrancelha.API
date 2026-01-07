@@ -1,125 +1,56 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
+using Microsoft.AspNetCore.Hosting;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Point = System.Drawing.Point;
+using SombrancelhaApp.Api.Application.Imagem;
 
 namespace SombrancelhaApp.Api.Application.Imagem;
 
 public class ProcessamentoImagemService : IProcessamentoImagemService
 {
+    private readonly INormalizacaoService _normalizacaoService;
+    private readonly IIaService _iaService;
     private readonly IRemocaoSobrancelhaService _remocaoService;
     private readonly ISubstituicaoSobrancelhaService _substituicaoService;
-    private readonly IDeteccaoFacialService _deteccaoFacialService;
+    private readonly IWebHostEnvironment _env;
 
     public ProcessamentoImagemService(
+        INormalizacaoService normalizacaoService,
+        IIaService iaService,
         IRemocaoSobrancelhaService remocaoService,
         ISubstituicaoSobrancelhaService substituicaoService,
-        IDeteccaoFacialService deteccaoFacialService)
+        IWebHostEnvironment env)
     {
+        _normalizacaoService = normalizacaoService;
+        _iaService = iaService;
         _remocaoService = remocaoService;
         _substituicaoService = substituicaoService;
-        _deteccaoFacialService = deteccaoFacialService;
+        _env = env;
     }
 
-    public ResultadoProcessamentoImagem ProcessarFluxoCompleto(string caminhoImagem, string nomeMolde)
+    public string ProcessarFluxoCompleto(string clienteId, string caminhoImagem, string nomeMolde, string corHex)
     {
-        if (!AguardarArquivoFicarDisponivel(caminhoImagem))
-        {
-            return ResultadoProcessamentoImagem.Falha("O arquivo original está sendo usado por outro processo.");
-        }
+        // ESTRUTURA DE PASTAS
+        string dataHoje = DateTime.Now.ToString("yyyy-MM-dd");
+        string pastaDestino = Path.Combine(_env.ContentRootPath, "Storage", "Atendimentos", dataHoje, clienteId);
 
-        var resultadoNormalizacao = Normalizar(caminhoImagem);
-        if (!resultadoNormalizacao.Sucesso) return resultadoNormalizacao;
+        if (!Directory.Exists(pastaDestino))
+            Directory.CreateDirectory(pastaDestino);
 
-        try
-        {
-            // 3. OBTENÇÃO DOS PONTOS (IA)
-            var pontosDeteccao = _deteccaoFacialService.DetectarSobrancelhas(resultadoNormalizacao.CaminhoProcessado!);
+        //  NORMALIZAÇÃO
+        string caminhoNormalizada = Path.Combine(pastaDestino, "1_normalizada.jpg");
+        _normalizacaoService.Normalizar(caminhoImagem, caminhoNormalizada);
 
-            if (pontosDeteccao.SobrancelhaEsquerda.Count == 0 && pontosDeteccao.SobrancelhaDireita.Count == 0)
-            {
-                return ResultadoProcessamentoImagem.Falha("Não foi possível detectar as sobrancelhas.");
-            }
+        // DETECÇÃO IA
+        var pontos = _iaService.DetectarPontos(caminhoNormalizada);
+        // REMOÇÃO
+        string caminhoLimpa = Path.Combine(pastaDestino, "2_limpa.jpg");
+        _remocaoService.RemoverSobrancelha(caminhoNormalizada, pontos, caminhoLimpa);
 
-            // pontos para o OpenCV limpar ambos os lados
-            var todosOsPontos = pontosDeteccao.SobrancelhaEsquerda.Concat(pontosDeteccao.SobrancelhaDireita).ToList();
+        // SUBSTITUIÇÃO
+        string caminhoFinal = _substituicaoService.AplicarMolde(caminhoLimpa, nomeMolde, pontos, corHex);
 
-            // 4. REMOÇÃO
-            var caminhoImagemSemSobrancelha = _remocaoService.RemoverSobrancelha(
-                resultadoNormalizacao.CaminhoProcessado!, 
-                todosOsPontos
-            );
-
-            if (!File.Exists(caminhoImagemSemSobrancelha))
-                return ResultadoProcessamentoImagem.Falha("Erro: O OpenCV não gerou a imagem limpa.");
-
-            // 5. SUBSTITUIÇÃO (Aplicação dos moldes)
-            // Lado Esquerdo (será espelhado pelo service pois o asset é direito)
-            var imgComEsquerda = _substituicaoService.AplicarMolde(
-                caminhoImagemSemSobrancelha, 
-                nomeMolde, 
-                pontosDeteccao.SobrancelhaEsquerda
-            );
-
-            // Lado Direito (usará asset original)
-            var caminhoImagemFinal = _substituicaoService.AplicarMolde(
-                imgComEsquerda, 
-                nomeMolde, 
-                pontosDeteccao.SobrancelhaDireita
-            );
-
-            return ResultadoProcessamentoImagem.Ok(caminhoImagemFinal);
-        }
-        catch (Exception ex)
-        {
-            // O fechamento do bloco try e o catch
-            return ResultadoProcessamentoImagem.Falha($"Erro no processamento: {ex.Message}");
-        }
-    }
-
-    public ResultadoProcessamentoImagem Normalizar(string caminhoImagem)
-    {
-        try
-        {
-            using var image = Image.Load(caminhoImagem);
-            image.Mutate(x =>
-            {
-                x.AutoOrient();
-                x.Resize(new ResizeOptions
-                {
-                    Mode = ResizeMode.Max,
-                    Size = new Size(512, 512)
-                });
-            });
-
-            var pasta = Path.GetDirectoryName(caminhoImagem)!;
-            var nomeArquivo = $"normalizada_{Guid.NewGuid()}.jpg";
-            var caminhoFinal = Path.Combine(pasta, nomeArquivo);
-
-            image.Save(caminhoFinal, new JpegEncoder { Quality = 90 });
-            return ResultadoProcessamentoImagem.Ok(caminhoFinal);
-        }
-        catch (Exception ex)
-        {
-            return ResultadoProcessamentoImagem.Falha($"Erro ao normalizar: {ex.Message}");
-        }
-    }
-
-    private bool AguardarArquivoFicarDisponivel(string caminho)
-    {
-        int tentativas = 0;
-        while (tentativas < 10)
-        {
-            try
-            {
-                using var fs = new FileStream(caminho, FileMode.Open, FileAccess.Read, FileShare.None);
-                return true;
-            }
-            catch (IOException)
-            {
-                tentativas++;
-                Thread.Sleep(200);
-            }
-        }
-        return false;
+        return caminhoFinal;
     }
 }

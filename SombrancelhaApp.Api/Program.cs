@@ -5,7 +5,7 @@ using SombrancelhaApp.Api.Repositories;
 using FluentValidation.AspNetCore;
 using SombrancelhaApp.Api.Validators;
 using SombrancelhaApp.Api.Application.Imagem;
-using Microsoft.Extensions.FileProviders; // 1. Adicionado para suportar arquivos físicos
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,20 +17,23 @@ builder.Services
         fv.RegisterValidatorsFromAssemblyContaining<CreateClienteDtoValidator>();
     });
 
-builder.Services.AddScoped<IClienteImagemRepository, ClienteImagemRepository>();
+// 🔹 Injeção de Dependências - Serviços de Imagem
 
-builder.Services
-    .AddMediatR(cfg =>
-        cfg.RegisterServicesFromAssembly(typeof(Program).Assembly)
-);
+builder.Services.AddScoped<INormalizacaoService, NormalizacaoService>(); // Adicionado
+builder.Services.AddScoped<IIaService, IaService>(); // Adicionado (ou o nome da sua classe de IA)
 
-builder.Services.AddScoped<IDeteccaoSobrancelhaService, DeteccaoSobrancelhaService>();
 builder.Services.AddScoped<IProcessamentoImagemService, ProcessamentoImagemService>();
 builder.Services.AddScoped<IRemocaoSobrancelhaService, RemocaoSobrancelhaService>();
-builder.Services.AddScoped<IDeteccaoFacialService, DeteccaoFacialService>();
 builder.Services.AddScoped<ISubstituicaoSobrancelhaService, SubstituicaoSobrancelhaService>();
 
-// 🔹 Banco de dados
+// serviços de detecção se ainda estiver usando separadamente
+builder.Services.AddScoped<IDeteccaoSobrancelhaService, DeteccaoSobrancelhaService>();
+builder.Services.AddScoped<IDeteccaoFacialService, DeteccaoFacialService>();
+
+// 🔹 Banco de Dados e Repositórios
+builder.Services.AddScoped<IClienteImagemRepository, ClienteImagemRepository>();
+builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("DefaultConnection")
@@ -38,18 +41,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     )
 );
 
-// 🔹 Repositórios
-builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
 // 🔹 Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "SobrancelhaApp API",
-        Version = "v1"
-    });
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "SobrancelhaApp API", Version = "v1" });
 });
 
 var app = builder.Build();
@@ -61,20 +59,31 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
-// 🔹 Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// 2. CONFIGURAÇÃO DE ACESSO ÀS IMAGENS VIA HTTP
-// Isso mapeia a pasta física para a URL: http://localhost:5000/visualizar-imagens
+// 🔹 2. CONFIGURAÇÃO DE ACESSO ÀS IMAGENS (MAPEAMENTOS)
+
+// Mapeamento 1: Imagens de Cadastro (Clientes)
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(
         Path.Combine(builder.Environment.ContentRootPath, "Infrastructure", "Images")),
     RequestPath = "/visualizar-imagens"
+});
+
+// Mapeamento 2: Imagens de Processamento (Atendimentos/Simulações)
+// Isso permite acessar: /visualizar-imagens/atendimentos/2024-05-20/clienteId/final.jpg
+string storagePath = Path.Combine(builder.Environment.ContentRootPath, "Storage");
+if (!Directory.Exists(storagePath)) Directory.CreateDirectory(storagePath);
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(storagePath),
+    RequestPath = "/visualizar-imagens-atendimentos"
 });
 
 app.UseHttpsRedirection();

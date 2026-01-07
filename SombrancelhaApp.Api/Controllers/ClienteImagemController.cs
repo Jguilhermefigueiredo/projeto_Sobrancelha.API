@@ -3,6 +3,7 @@ using SombrancelhaApp.Api.DTOs;
 using SombrancelhaApp.Api.Domain;
 using SombrancelhaApp.Api.Repositories;
 using SombrancelhaApp.Api.Application.Imagem;
+using System.IO;
 
 namespace SombrancelhaApp.Api.Controllers;
 
@@ -27,64 +28,6 @@ public class ClienteImagemController : ControllerBase
         _env = env;
     }
 
-    [HttpPost]
-    public IActionResult UploadImagem(Guid clienteId, [FromForm] UploadImagemClienteDto dto)
-    {
-        var cliente = _clienteRepository.GetById(clienteId);
-        if (cliente == null) return NotFound("Cliente não encontrado");
-
-        if (dto.Imagem == null || dto.Imagem.Length == 0)
-            return BadRequest("Imagem inválida");
-
-        var extensao = Path.GetExtension(dto.Imagem.FileName).ToLowerInvariant();
-        if (extensao != ".jpg" && extensao != ".jpeg" && extensao != ".png")
-            return BadRequest("Formato de imagem não suportado");
-
-        var pasta = Path.Combine(_env.ContentRootPath, "Infrastructure", "Images", "clientes", clienteId.ToString());
-        Directory.CreateDirectory(pasta);
-
-        var nomeArquivo = $"{Guid.NewGuid()}{extensao}";
-        var caminhoCompleto = Path.Combine(pasta, nomeArquivo);
-
-        using (var stream = new FileStream(caminhoCompleto, FileMode.Create, FileAccess.Write, FileShare.None))
-        {
-            dto.Imagem.CopyTo(stream);
-            stream.Flush();
-        }
-
-        var imagem = new ClienteImagem(clienteId, caminhoCompleto);
-        _clienteImagemRepository.Add(imagem);
-
-        // Gera a URL acessível para a imagem original
-        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-        var urlAcessivel = $"{baseUrl}/visualizar-imagens/clientes/{clienteId}/{nomeArquivo}";
-
-        return Created(string.Empty, new
-        {
-            imagem.Id,
-            urlOriginal = urlAcessivel,
-            imagem.CriadoEm
-        });
-    }
-
-    [HttpGet]
-    public IActionResult ListarImagens(Guid clienteId)
-    {
-        var cliente = _clienteRepository.GetById(clienteId);
-        if (cliente == null) return NotFound("Cliente não encontrado");
-
-        var imagens = _clienteImagemRepository.GetByClienteId(clienteId);
-        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-
-        var response = imagens.Select(i => new
-        {
-            i.Id,
-            url = $"{baseUrl}/visualizar-imagens/clientes/{clienteId}/{Path.GetFileName(i.Caminho)}",
-            i.CriadoEm
-        });
-
-        return Ok(response);
-    }
 
     [HttpPost("{imagemId:guid}/detectar-sobrancelha")]
     public IActionResult DetectarSobrancelha(Guid clienteId, Guid imagemId, [FromBody] ProcessarSimulacaoDto dto)
@@ -95,24 +38,40 @@ public class ClienteImagemController : ControllerBase
         var imagem = _clienteImagemRepository.GetById(imagemId);
         if (imagem == null) return NotFound("Imagem não encontrada");
 
-        var resultado = _processamentoImagemService.ProcessarFluxoCompleto(imagem.Caminho, dto.NomeMolde);
-
-        if (!resultado.Sucesso)
-            return BadRequest(resultado.Mensagem);
-
-        // --- LÓGICA DE URL ACESSÍVEL ---
-        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-        var nomeArquivoFinal = Path.GetFileName(resultado.CaminhoProcessado!);
-
-        // Monta a URL que aponta para o middleware StaticFiles configurado no Program.cs
-        var urlSimulacao = $"{baseUrl}/visualizar-imagens/clientes/{clienteId}/{nomeArquivoFinal}";
-
-        return Ok(new
+        try 
         {
-            imagemOriginalId = imagem.Id,
-            moldeAplicado = dto.NomeMolde,
-            mensagem = "Simulação gerada com sucesso",
-            urlSimulacao = urlSimulacao
-        });
+            // O serviço agora retorna uma STRING (caminho do arquivo final)
+            // Passamos: clienteId.ToString(), caminhoOriginal, nomeMolde e corHex (se existir no DTO)
+            var corParaAplicar = "#3B2F2F"; // Valor padrão ou venha de dto.CorHex  DTO
+            
+            var caminhoFinal = _processamentoImagemService.ProcessarFluxoCompleto(
+                clienteId.ToString(), 
+                imagem.Caminho, 
+                dto.NomeMolde, 
+                corParaAplicar
+            );
+
+            if (string.IsNullOrEmpty(caminhoFinal))
+                return BadRequest("Não foi possível gerar a simulação.");
+
+            // --- LÓGICA DE URL ACESSÍVEL ---
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+            var nomeArquivoFinal = Path.GetFileName(caminhoFinal);
+
+            // Importante: Como o ProcessarFluxoCompleto agora salva na pasta Storage/Atendimentos,
+            var urlSimulacao = $"{baseUrl}/visualizar-imagens/atendimentos/{clienteId}/{nomeArquivoFinal}";
+
+            return Ok(new
+            {
+                imagemOriginalId = imagem.Id,
+                moldeAplicado = dto.NomeMolde,
+                mensagem = "Simulação gerada com sucesso",
+                urlSimulacao = urlSimulacao
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Erro no processamento: {ex.Message}");
+        }
     }
 }
