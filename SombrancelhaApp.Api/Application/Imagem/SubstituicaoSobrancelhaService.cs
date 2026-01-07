@@ -19,10 +19,6 @@ public class SubstituicaoSobrancelhaService : ISubstituicaoSobrancelhaService
         _env = env;
     }
 
-    /// <summary>
-    /// Lista todos os moldes (PNG) disponíveis na pasta de assets.
-    /// Resolve o erro CS0535 de falta de implementação.
-    /// </summary>
     public List<string> ListarMoldesDisponiveis()
     {
         var diretorioMoldes = Path.Combine(_env.ContentRootPath, "Infrastructure", "Assets", "Sobrancelhas");
@@ -53,39 +49,45 @@ public class SubstituicaoSobrancelhaService : ISubstituicaoSobrancelhaService
                 double deltaY = pFim.Y - pInicio.Y;
 
                 float angulo = (float)(Math.Atan2(deltaY, deltaX) * (180 / Math.PI));
-                int larguraDesejada = (int)(Math.Sqrt(deltaX * deltaX + deltaY * deltaY) * 1.2);
+                // Aumentamos levemente a escala para cobrir a área removida
+                int larguraDesejada = (int)(Math.Sqrt(deltaX * deltaX + deltaY * deltaY) * 1.25);
 
                 // TRANSFORMAÇÃO E ESTÉTICA
                 molde.Mutate(ctx =>
                 {
-                    // Redimensionamento proporcional
                     ctx.Resize(larguraDesejada, 0);
 
-                    // Espelhamento se necessário
                     if (ehLadoEsquerdo) ctx.Flip(FlipMode.Horizontal);
 
-                    // Rotação anatômica
                     ctx.Rotate(angulo);
-
-                    // (Tingimento)
                     AplicarCor(ctx, hexColor);
-
-                    // Feathering
                     ctx.GaussianBlur(0.7f);
                 });
 
-                // CÁLCULO DE POSIÇÃO (Ancoragem pela Base)
-                int centroX = (pInicio.X + pFim.X) / 2;
-                int centroY = (pInicio.Y + pFim.Y) / 2;
+                // CÁLCULO DE POSIÇÃO CALIBRADO (Evita o "efeito ombro")
+                // Usamos o ponto inicial como âncora e centralizamos a altura do molde nele
+                int xFinal, yFinal;
 
-                int ajusteFinoY = 45;
+                if (ehLadoEsquerdo)
+                {
+                    // No lado esquerdo, o pInicio é o canto interno (perto do nariz)
+                    xFinal = pInicio.X; 
+                    yFinal = pInicio.Y - (molde.Height / 2);
+                }
+                else
+                {
+                    // No lado direito, subtraímos a largura para o molde crescer para a direita
+                    xFinal = pInicio.X - molde.Width; 
+                    yFinal = pInicio.Y - (molde.Height / 2);
+                }
 
-                var posicaoDesenho = new SixLabors.ImageSharp.Point(
-                    centroX - (molde.Width / 2),
-                    centroY - molde.Height + ajusteFinoY
-                );
+                // SEGURANÇA: Impede que o desenho saia da imagem (causa do erro de "não alteração")
+                xFinal = Math.Clamp(xFinal, 0, imagemBase.Width - molde.Width);
+                yFinal = Math.Clamp(yFinal, 0, imagemBase.Height - molde.Height);
 
-                // Blending (Sobreposição com opacidade controlada)
+                var posicaoDesenho = new SixLabors.ImageSharp.Point(xFinal, yFinal);
+
+                // Blending
                 imagemBase.Mutate(ctx => ctx.DrawImage(molde, posicaoDesenho, 0.92f));
 
                 // Salvamento
@@ -99,27 +101,22 @@ public class SubstituicaoSobrancelhaService : ISubstituicaoSobrancelhaService
         }
     }
 
-
     private void AplicarCor(IImageProcessingContext ctx, string hexColor)
-{
-    // Converte a string Hex para Color
-    var color = Color.ParseHex(hexColor);
-    // Converte a Color para Rgba32 para extrair os valores numéricos de 0 a 1
-    Rgba32 rgba = color;
-    float r = rgba.R / 255f;
-    float g = rgba.G / 255f;
-    float b = rgba.B / 255f;
+    {
+        var color = Color.ParseHex(hexColor);
+        Rgba32 rgba = color;
+        float r = rgba.R / 255f;
+        float g = rgba.G / 255f;
+        float b = rgba.B / 255f;
 
-    var matrix = new ColorMatrix(
-        r, 0, 0, 0,
-        0, g, 0, 0,
-        0, 0, b, 0,
-        0, 0, 0, 1,
-        0, 0, 0, 0
-    );
+        var matrix = new ColorMatrix(
+            r, 0, 0, 0,
+            0, g, 0, 0,
+            0, 0, b, 0,
+            0, 0, 0, 1,
+            0, 0, 0, 0
+        );
 
-    ctx.Filter(matrix);
-}
-
-
+        ctx.Filter(matrix);
+    }
 }
