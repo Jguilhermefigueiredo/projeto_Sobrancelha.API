@@ -43,14 +43,20 @@ public class ProcessamentoImagemService : IProcessamentoImagemService
         _normalizacaoService.Normalizar(caminhoImagem, caminhoNormalizada);
 
         // DETECÇÃO IA
-        var pontos = _iaService.DetectarPontos(caminhoNormalizada);
-        // REMOÇÃO
-        string caminhoLimpa = Path.Combine(pastaDestino, "2_limpa.jpg");
-        _remocaoService.RemoverSobrancelha(caminhoNormalizada, pontos, caminhoLimpa);
+        var todosPontos = _iaService.DetectarPontos(caminhoNormalizada);
 
-        // SUBSTITUIÇÃO
-        string caminhoFinal = _substituicaoService.AplicarMolde(caminhoLimpa, nomeMolde, pontos, corHex);
+// Separa os pontos (Lógica IBUG)
+var pontosEsquerda = todosPontos.Take(5).ToList(); // 17-21
+var pontosDireita = todosPontos.Skip(5).Take(5).ToList(); // 22-26
 
-        return caminhoFinal;
+// REMOÇÃO (Passa todos os pontos para limpar ambos os lados)
+string caminhoLimpa = Path.Combine(pastaDestino, "2_limpa.jpg");
+_remocaoService.RemoverSobrancelha(caminhoNormalizada, todosPontos, caminhoLimpa);
+
+// SUBSTITUIÇÃO (Exemplo aplicando no lado que o usuário escolher ou ambos)
+string caminhoFinal = _substituicaoService.AplicarMolde(caminhoLimpa, nomeMolde, pontosEsquerda, corHex);
+caminhoFinal = _substituicaoService.AplicarMolde(caminhoFinal, nomeMolde, pontosDireita, corHex);
+
+return caminhoFinal;
     }
 }

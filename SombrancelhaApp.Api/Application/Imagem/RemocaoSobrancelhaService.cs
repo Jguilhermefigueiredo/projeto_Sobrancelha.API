@@ -36,7 +36,7 @@ namespace SombrancelhaApp.Api.Application.Imagem
 
             // Inpainting (Remoção inteligente)
             using var result = new Mat();
-            Cv2.Inpaint(src, mask, result, 2, InpaintMethod.Telea);
+            Cv2.Inpaint(src, mask, result, 7, InpaintMethod.Telea);
 
             // Persistência usando o caminho definido pelo orquestrador
             result.ImWrite(caminhoSaida);

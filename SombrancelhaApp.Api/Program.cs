@@ -75,16 +75,23 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/visualizar-imagens"
 });
 
-// Mapeamento 2: Imagens de Processamento (Atendimentos/Simulações)
-// Isso permite acessar: /visualizar-imagens/atendimentos/2024-05-20/clienteId/final.jpg
+// --- MAPEAMENTO 2 ---
 string storagePath = Path.Combine(builder.Environment.ContentRootPath, "Storage");
 if (!Directory.Exists(storagePath)) Directory.CreateDirectory(storagePath);
 
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storagePath),
-    RequestPath = "/visualizar-imagens-atendimentos"
+    RequestPath = "/visualizar-imagens-atendimentos",
+    OnPrepareResponse = ctx =>
+    {
+        // Adiciona o cabeçalho de Cache para que o navegador não precise baixar
+        // a mesma imagem várias vezes enquanto o usuário testa moldes.
+        ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=604800");
+    }
 });
+
+
 
 app.UseHttpsRedirection();
 app.MapControllers();

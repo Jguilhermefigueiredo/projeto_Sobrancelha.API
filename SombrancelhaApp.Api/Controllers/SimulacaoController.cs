@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SombrancelhaApp.Api.Application.Imagem;
+using SombrancelhaApp.Api.DTOs;
+using System.IO;
 
 namespace SombrancelhaApp.Api.Controllers;
 
@@ -18,47 +20,57 @@ public class SimulacaoController : ControllerBase
         _substituicaoService = substituicaoService;
     }
 
-    // Endpoint principal: Recebe a foto da câmera e retorna a simulação pronta.
-
     [HttpPost("processar")]
-[Consumes("multipart/form-data")] //  Swagger mostra o botão de upload
-public async Task<IActionResult> ProcessarFoto(
-    IFormFile foto, // Sem o [FromForm] aqui evita confusão de mapeamento
-    [FromForm] string clienteId, 
-    [FromForm] string nomeMolde, 
-    [FromForm] string corHex = "#3B2F2F")
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> ProcessarFoto(
+        IFormFile foto, 
+        [FromForm] string clienteId, 
+        [FromForm] string nomeMolde, 
+        [FromForm] string corHex = "#3B2F2F")
     {
         if (foto == null || foto.Length == 0)
             return BadRequest("Nenhuma foto foi enviada.");
 
         try
         {
-            // Salva temporariamente o upload inicial para processamento
+            // 1. Salva temporariamente o upload inicial
             var tempPath = Path.GetTempFileName() + ".jpg";
             using (var stream = new FileStream(tempPath, FileMode.Create))
             {
                 await foto.CopyToAsync(stream);
             }
 
-            // cuida das pastas Storage/Atendimentos/{Data}/{Id}
-            string caminhoResultado = _processamentoService.ProcessarFluxoCompleto(
-            clienteId,
-            tempPath,
-            nomeMolde,
-            corHex
-);
+            // 2. Executa o fluxo e recebe o caminho físico (C:\...\Storage\...)
+            string caminhoFisicoFinal = _processamentoService.ProcessarFluxoCompleto(
+                clienteId,
+                tempPath,
+                nomeMolde,
+                corHex
+            );
 
-            // Retorna o arquivo final para o frontend
-            var bytes = await System.IO.File.ReadAllBytesAsync(caminhoResultado);
-            return File(bytes, "image/jpeg");
+            // 3. Montagem da URL para o Front-end
+            string nomeArquivo = Path.GetFileName(caminhoFisicoFinal);
+            string dataPasta = DateTime.Now.ToString("yyyy-MM-dd");
+
+            // RequestPath personalizado: /visualizar-imagens-atendimentos
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+            var urlRelativa = $"/visualizar-imagens-atendimentos/Atendimentos/{dataPasta}/{clienteId}/{nomeArquivo}".Replace("\\", "/");
+
+            // 4. Retorno estruturado via DTO
+            var resposta = new SimulacaoRespostaDto
+            {
+                ClienteId = clienteId,
+                UrlImagemFinal = baseUrl + urlRelativa,
+                DataProcessamento = DateTime.Now
+            };
+
+            return Ok(resposta);
         }
         catch (Exception ex)
         {
             return StatusCode(500, $"Erro interno: {ex.Message}");
         }
     }
-
-    //Retorna a lista de nomes de sobrancelhas disponíveis para o carrossel do front.
 
     [HttpGet("moldes")]
     public IActionResult GetMoldes()
