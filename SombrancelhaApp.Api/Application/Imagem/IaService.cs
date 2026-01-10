@@ -12,7 +12,7 @@ public class IaService : IIaService
 
     public IaService(IWebHostEnvironment env)
     {
-        // Ajustado para a pasta "Models" conforme sua localização atual
+        // Ajustado para a pasta "Models"
         _caminhoModelo = Path.Combine(env.ContentRootPath, "Models", "shape_predictor_68_face_landmarks.dat");
         
         // Log preventivo para você ver no terminal onde ele está procurando se falhar

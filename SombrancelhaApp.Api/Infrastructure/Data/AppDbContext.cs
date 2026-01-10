@@ -14,7 +14,8 @@ public class AppDbContext : DbContext
         : base(options)
     {
     }
-
+    public DbSet<AtendimentoSimulacao> AtendimentoSimulacoes { get; set; }
+    
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

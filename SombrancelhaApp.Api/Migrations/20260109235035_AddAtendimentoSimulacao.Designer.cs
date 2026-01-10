@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SombrancelhaApp.Api.Infrastructure.Data;
 
@@ -10,52 +11,14 @@ using SombrancelhaApp.Api.Infrastructure.Data;
 namespace SombrancelhaApp.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260109235035_AddAtendimentoSimulacao")]
+    partial class AddAtendimentoSimulacao
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.22");
-
-            modelBuilder.Entity("SombrancelhaApp.Api.Domain.AtendimentoSimulacao", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("AvisadoSobreExpiracao")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CaminhoImagemFinal")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ClienteId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("ConfirmadoParaDeletar")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CorHex")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("DataCriacao")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("NomeMolde")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UrlImagemFinal")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AtendimentoSimulacoes");
-                });
 
             modelBuilder.Entity("SombrancelhaApp.Api.Domain.Cliente", b =>
                 {

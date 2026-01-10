@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Point = System.Drawing.Point;
+
 
 namespace SombrancelhaApp.Api.Application.Imagem;
 
@@ -28,69 +28,64 @@ public class SubstituicaoSobrancelhaService : ISubstituicaoSobrancelhaService
         return arquivos.Select(f => Path.GetFileNameWithoutExtension(f)).ToList();
     }
 
-    public string AplicarMolde(string caminhoImagemBase, string nomeMolde, List<Point> pontos, string hexColor = "#3B2F2F")
+    public string AplicarMolde(string caminhoImagemBase, string nomeMolde, List<System.Drawing.Point> pontos, string hexColor = "#3B2F2F")
+{
+    var caminhoMolde = Path.Combine(_env.ContentRootPath, "Infrastructure", "Assets", "Sobrancelhas", $"{nomeMolde}.png");
+
+    if (!File.Exists(caminhoMolde))
+        throw new FileNotFoundException($"Molde {nomeMolde} não encontrado.");
+
+    using (var imagemBase = Image.Load<Rgba32>(caminhoImagemBase))
+    using (var molde = Image.Load<Rgba32>(caminhoMolde))
     {
-        var caminhoMolde = Path.Combine(_env.ContentRootPath, "Infrastructure", "Assets", "Sobrancelhas", $"{nomeMolde}.png");
+        // 1. Bounding Box
+        int minX = pontos.Min(p => p.X);
+        int maxX = pontos.Max(p => p.X);
+        int minY = pontos.Min(p => p.Y);
+        int maxY = pontos.Max(p => p.Y);
 
-        using (var imagemBase = Image.Load<Rgba32>(caminhoImagemBase))
-        using (var molde = Image.Load<Rgba32>(caminhoMolde))
+        int centroX = (minX + maxX) / 2;
+        int centroY = (minY + maxY) / 2;
+        int larguraRealIA = Math.Abs(maxX - minX);
+
+        // 2. Lado da foto
+        bool estaNoLadoEsquerdoDaFoto = centroX < (imagemBase.Width / 2);
+
+        // 3. Ângulo
+        var pInicio = pontos.First();
+        var pFim = pontos.Last();
+        float angulo = (float)(Math.Atan2(pFim.Y - pInicio.Y, pFim.X - pInicio.X) * (180 / Math.PI));
+
+        // 4. Transformação
+        molde.Mutate(ctx =>
         {
-            // 1. Encontrar limites e centro (Bounding Box)
-            int minX = pontos.Min(p => p.X);
-            int maxX = pontos.Max(p => p.X);
-            int minY = pontos.Min(p => p.Y);
-            int maxY = pontos.Max(p => p.Y);
+            ctx.Resize((int)(larguraRealIA * 1.15), 0);
 
-            int centroX = (minX + maxX) / 2;
-            int centroY = (minY + maxY) / 2;
-            int larguraRealIA = Math.Abs(maxX - minX);
+            if (estaNoLadoEsquerdoDaFoto)
+                ctx.Flip(FlipMode.Horizontal);
 
-            // 2. Identificação de lado baseada na FOTO
-            var pInicio = pontos.First();
-            var pFim = pontos.Last();
-            bool estaNoLadoEsquerdoDaFoto = pInicio.X < (imagemBase.Width / 2);
+            ctx.Rotate(angulo);
+            AplicarCor(ctx, hexColor);
+            ctx.GaussianBlur(0.3f);
+        });
 
-            // 3. Geometria de inclinação
-            double deltaX = pFim.X - pInicio.X;
-            double deltaY = pFim.Y - pInicio.Y;
-            float angulo = (float)(Math.Atan2(deltaY, deltaX) * (180 / Math.PI));
+        // 5. Posicionamento
+        int xFinal = centroX - (molde.Width / 2);
+        int yFinal = centroY - (molde.Height / 2);
 
-            // 4. Transformação do Molde
-            molde.Mutate(ctx =>
-            {
-                // Redimensiona baseado na detecção real
-                ctx.Resize((int)(larguraRealIA * 1.15), 0);
+        // Clamping para não desenhar fora da imagem base
+        xFinal = Math.Clamp(xFinal, 0, imagemBase.Width - molde.Width);
+        yFinal = Math.Clamp(yFinal, 0, imagemBase.Height - molde.Height);
 
-                // LÓGICA DE ESPELHAMENTO CORRIGIDA
-                // Se o asset original for o lado direito, espelhamos quando estiver na esquerda da foto
-                if (estaNoLadoEsquerdoDaFoto) 
-                {
-                    ctx.Flip(FlipMode.Horizontal);
-                }
+        // 6. Blend (Opacidade de 90% para naturalidade)
+        imagemBase.Mutate(ctx => ctx.DrawImage(molde, new Point(xFinal, yFinal), 0.90f));
 
-                ctx.Rotate(angulo);
-                AplicarCor(ctx, hexColor);
-                ctx.GaussianBlur(0.5f);
-            });
+        var diretorio = Path.GetDirectoryName(caminhoImagemBase)!;
+        var caminhoFinal = Path.Combine(diretorio, $"final_{Guid.NewGuid()}.jpg");
+        imagemBase.Save(caminhoFinal);
 
-            // 5. POSICIONAMENTO CENTRALIZADO (Bounding Box)
-            // Centraliza o molde no "meio" de onde a sobrancelha original estava
-            int xFinal = centroX - (molde.Width / 2);
-            int yFinal = centroY - (molde.Height / 2);
-
-            // Segurança: Clamping
-            xFinal = Math.Clamp(xFinal, 0, imagemBase.Width - molde.Width);
-            yFinal = Math.Clamp(yFinal, 0, imagemBase.Height - molde.Height);
-
-            // 6. Desenho e Salvamento
-            imagemBase.Mutate(ctx => ctx.DrawImage(molde, new SixLabors.ImageSharp.Point(xFinal, yFinal), 0.90f));
-
-            var diretorio = Path.GetDirectoryName(caminhoImagemBase)!;
-            var caminhoFinal = Path.Combine(diretorio, $"final_{Guid.NewGuid()}.jpg");
-            imagemBase.Save(caminhoFinal);
-
-            return caminhoFinal;
-        }
+        return caminhoFinal;
+    }
     }
 
     private void AplicarCor(IImageProcessingContext ctx, string hexColor)

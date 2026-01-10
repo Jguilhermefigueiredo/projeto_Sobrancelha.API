@@ -6,6 +6,7 @@ using FluentValidation.AspNetCore;
 using SombrancelhaApp.Api.Validators;
 using SombrancelhaApp.Api.Application.Imagem;
 using Microsoft.Extensions.FileProviders;
+using SombrancelhaApp.Api.Infrastructure.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,9 +31,14 @@ builder.Services.AddScoped<ISubstituicaoSobrancelhaService, SubstituicaoSobrance
 builder.Services.AddScoped<IDeteccaoSobrancelhaService, DeteccaoSobrancelhaService>();
 builder.Services.AddScoped<IDeteccaoFacialService, DeteccaoFacialService>();
 
+//limpeza de cache
+builder.Services.AddHostedService<LimpezaArquivosService>();
+
 // 🔹 Banco de Dados e Repositórios
 builder.Services.AddScoped<IClienteImagemRepository, ClienteImagemRepository>();
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
+
+
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(
