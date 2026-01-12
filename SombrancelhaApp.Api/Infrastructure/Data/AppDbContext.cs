@@ -15,10 +15,15 @@ public class AppDbContext : DbContext
     {
     }
     public DbSet<AtendimentoSimulacao> AtendimentoSimulacoes { get; set; }
-    
+
+    public DbSet<Usuario> Usuarios { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
-        base.OnModelCreating(modelBuilder);
-    }
+    modelBuilder.Entity<AtendimentoSimulacao>()
+        .HasOne(s => s.Usuario)
+        .WithMany()
+        .HasForeignKey(s => s.UsuarioId)
+        .OnDelete(DeleteBehavior.Restrict);
+}
 }

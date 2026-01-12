@@ -11,9 +11,13 @@ public class AtendimentoSimulacao
     public string CaminhoImagemFinal { get; set; } = string.Empty;
     public string UrlImagemFinal { get; set; } = string.Empty;
 
-    //liberação de cache
+    // Liberação de cache / Controle de Ciclo de Vida
     public bool ConfirmadoParaDeletar { get; set; } = false;
-    public bool AvisadoSobreExpiracao { get; set; } = false; // para notificações
+    public bool AvisadoSobreExpiracao { get; set; } = false;
+
+    // Relacionamento: Quem fez o trabalho
+    public Guid UsuarioId { get; set; }
+    public virtual Usuario Usuario { get; set; } = null!; // Propriedade de navegação
 
     public DateTime DataCriacao { get; set; } = DateTime.Now;
 }

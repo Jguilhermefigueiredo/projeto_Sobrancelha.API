@@ -11,8 +11,8 @@ using SombrancelhaApp.Api.Infrastructure.Data;
 namespace SombrancelhaApp.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260110000706_AddConfirmacaoLimpeza")]
-    partial class AddConfirmacaoLimpeza
+    [Migration("20260112144004_InitialSaaS")]
+    partial class InitialSaaS
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -55,7 +55,12 @@ namespace SombrancelhaApp.Api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
 
                     b.ToTable("AtendimentoSimulacoes");
                 });
@@ -63,6 +68,7 @@ namespace SombrancelhaApp.Api.Migrations
             modelBuilder.Entity("SombrancelhaApp.Api.Domain.Cliente", b =>
                 {
                     b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CriadoEm")
@@ -73,17 +79,15 @@ namespace SombrancelhaApp.Api.Migrations
 
                     b.Property<string>("Nome")
                         .IsRequired()
-                        .HasMaxLength(150)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Telefone")
                         .IsRequired()
-                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Clientes", (string)null);
+                    b.ToTable("Clientes");
                 });
 
             modelBuilder.Entity("SombrancelhaApp.Api.Domain.ClienteImagem", b =>
@@ -105,6 +109,46 @@ namespace SombrancelhaApp.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ClienteImagens");
+                });
+
+            modelBuilder.Entity("SombrancelhaApp.Api.Domain.Usuario", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataCriacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Perfil")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SenhaHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("SombrancelhaApp.Api.Domain.AtendimentoSimulacao", b =>
+                {
+                    b.HasOne("SombrancelhaApp.Api.Domain.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 #pragma warning restore 612, 618
         }

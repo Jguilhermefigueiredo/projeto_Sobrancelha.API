@@ -1,19 +1,22 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization; // Necessário para [Authorize]
 using SombrancelhaApp.Api.Application.Imagem;
-using SombrancelhaApp.Api.Domain; // Namespace da nova entidade
+using SombrancelhaApp.Api.Domain;
 using SombrancelhaApp.Api.DTOs;
-using SombrancelhaApp.Api.Infrastructure.Data; // Namespace do AppDbContext
+using SombrancelhaApp.Api.Infrastructure.Data;
+using System.Security.Claims; // Necessário para Claims
 
 namespace SombrancelhaApp.Api.Controllers;
 
+[Authorize] // Bloqueia acesso anônimo para toda a classe
 [ApiController]
 [Route("api/[controller]")]
 public class SimulacaoController : ControllerBase
 {
     private readonly IProcessamentoImagemService _processamentoService;
     private readonly ISubstituicaoSobrancelhaService _substituicaoService;
-    private readonly AppDbContext _context; // Injeção do banco
+    private readonly AppDbContext _context;
 
     public SimulacaoController(
         IProcessamentoImagemService processamentoService,
@@ -35,6 +38,13 @@ public class SimulacaoController : ControllerBase
     {
         if (foto == null || foto.Length == 0)
             return BadRequest("Nenhuma foto foi enviada.");
+
+        // 🔹 Captura o ID do Usuário Logado (Master ou Funcionário) do Token JWT
+        var claimUsuarioId = User.FindFirst("UsuarioId")?.Value;
+        if (string.IsNullOrEmpty(claimUsuarioId))
+            return Unauthorized("Usuário não identificado no token.");
+
+        var usuarioIdLogado = Guid.Parse(claimUsuarioId);
 
         try
         {
@@ -58,7 +68,7 @@ public class SimulacaoController : ControllerBase
             var urlRelativa = $"/visualizar-imagens-atendimentos/Atendimentos/{dataPasta}/{clienteId}/{nomeArquivo}".Replace("\\", "/");
             var urlCompleta = baseUrl + urlRelativa;
 
-            // Salva registro no banco de dados
+            // 🔹 Salva registro no banco de dados incluindo o Usuário autor da ação
             var atendimento = new AtendimentoSimulacao
             {
                 ClienteId = clienteId,
@@ -66,6 +76,7 @@ public class SimulacaoController : ControllerBase
                 CorHex = corHex,
                 CaminhoImagemFinal = caminhoFisicoFinal,
                 UrlImagemFinal = urlCompleta,
+                UsuarioId = usuarioIdLogado, // Vinculação com o RBAC
                 DataCriacao = DateTime.Now
             };
 
@@ -86,15 +97,15 @@ public class SimulacaoController : ControllerBase
     }
 
     [HttpGet("moldes")]
-public IActionResult GetMoldes()
-{
-    var moldes = _substituicaoService.ListarMoldesDisponiveis();
-    
-    if (moldes == null || !moldes.Any())
-        return NotFound("Nenhum molde de sobrancelha encontrado na pasta Assets.");
+    public IActionResult GetMoldes()
+    {
+        var moldes = _substituicaoService.ListarMoldesDisponiveis();
+        
+        if (moldes == null || !moldes.Any())
+            return NotFound("Nenhum molde de sobrancelha encontrado na pasta Assets.");
 
-    return Ok(moldes);
-}
+        return Ok(moldes);
+    }
 
     [HttpGet("historico/{clienteId}")]
     public async Task<IActionResult> GetHistorico(string clienteId)
@@ -109,25 +120,20 @@ public IActionResult GetMoldes()
 
     [HttpPatch("confirmar-limpeza/{id}")]
     public async Task<IActionResult> ConfirmarLimpeza(Guid id)
-{
-    //Busca a simulação no banco usando o ID (Guid)
-    var simulacao = await _context.AtendimentoSimulacoes.FindAsync(id);
-
-    if (simulacao == null)
     {
-        return NotFound("Simulação não encontrada.");
+        var simulacao = await _context.AtendimentoSimulacoes.FindAsync(id);
+
+        if (simulacao == null)
+            return NotFound("Simulação não encontrada.");
+
+        simulacao.ConfirmadoParaDeletar = true;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            mensagem = "Exclusão autorizada. O arquivo será removido fisicamente na próxima rotina de limpeza.",
+            id = id,
+            autorizadoEm = DateTime.Now
+        });
     }
-
-    //Altera o status para que o BackgroundService saiba que pode apagar
-    simulacao.ConfirmadoParaDeletar = true;
-
-    // Persiste a mudança no SQLite
-    await _context.SaveChangesAsync();
-
-    return Ok(new {
-        mensagem = "Exclusão autorizada. O arquivo será removido fisicamente na próxima rotina de limpeza.",
-        id = id,
-        autorizadoEm = DateTime.Now
-    });
-}
 }

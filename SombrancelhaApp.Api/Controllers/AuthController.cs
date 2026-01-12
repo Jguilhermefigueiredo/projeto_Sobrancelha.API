@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SombrancelhaApp.Api.Domain;
 using SombrancelhaApp.Api.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 
 namespace SombrancelhaApp.Api.Controllers;
 
@@ -46,33 +47,74 @@ public class AuthController : ControllerBase
     }
 
     private string GerarTokenJwt(Usuario usuario)
-    {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        
-        // IMPORTANTE: Use a mesma chave que você configurou no Program.cs
-        // O ideal é que ela venha do appsettings.json
-        var chaveStr = "Sua_Chave_Super_Secreta_De_32_Caracteres_Aqui"; 
-        var chave = Encoding.ASCII.GetBytes(chaveStr);
+{
+    var tokenHandler = new JwtSecurityTokenHandler();
 
-        var tokenDescriptor = new SecurityTokenDescriptor
+    // BUSCA A CHAVE DA CONFIGURAÇÃO (Program.cs)
+    var chaveStr = _config["Jwt:ChaveSecreta"];
+    
+    // Fallback de segurança para o seu teste local agora
+    if (string.IsNullOrEmpty(chaveStr) || chaveStr == "ConfigurarNoServidor")
+    {
+        chaveStr = "Chave_Temporaria_Para_Teste_32_Caracteres!";
+    }
+    
+    var chave = Encoding.ASCII.GetBytes(chaveStr);
+
+    var tokenDescriptor = new SecurityTokenDescriptor
+    {
+        Subject = new ClaimsIdentity(new[]
         {
-            Subject = new ClaimsIdentity(new[]
-            {
-                new Claim(ClaimTypes.Name, usuario.Nome),
-                new Claim(ClaimTypes.Email, usuario.Email),
-                new Claim(ClaimTypes.Role, usuario.Perfil.ToString()), // Master ou Funcionario
-                new Claim("UsuarioId", usuario.Id.ToString())
-            }),
-            Expires = DateTime.UtcNow.AddHours(8), // Token expira em 8 horas
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(chave), 
-                SecurityAlgorithms.HmacSha256Signature)
+            new Claim(ClaimTypes.Name, usuario.Nome),
+            new Claim(ClaimTypes.Email, usuario.Email),
+            new Claim(ClaimTypes.Role, usuario.Perfil.ToString()),
+            new Claim("UsuarioId", usuario.Id.ToString())
+        }),
+        Expires = DateTime.UtcNow.AddHours(8),
+        SigningCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(chave), 
+            SecurityAlgorithms.HmacSha256Signature)
+    };
+
+    var token = tokenHandler.CreateToken(tokenDescriptor);
+    return tokenHandler.WriteToken(token);
+}
+
+    // Endpoint para o Master cadastrar funcionários
+    [Authorize(Roles = "Master")] // Apenas usuários com perfil Master
+    [HttpPost("registrar-funcionario")]
+    public async Task<IActionResult> Registrar([FromBody] RegistroRequest request)
+    {
+        // Verifica se o e-mail já está em uso
+        var usuarioExistente = await _context.Usuarios
+            .AnyAsync(u => u.Email == request.Email);
+
+        if (usuarioExistente)
+            return BadRequest(new { mensagem = "Este e-mail já está cadastrado no sistema." });
+
+        // Cria o novo usuário com perfil de Funcionario
+        var novoFuncionario = new Usuario
+        {
+            Id = Guid.NewGuid(),
+            Nome = request.Nome,
+            Email = request.Email,
+            // Criptografa a senha usando BCrypt
+            SenhaHash = BCrypt.Net.BCrypt.HashPassword(request.Senha),
+            Perfil = PerfilUsuario.Funcionario, //funcionário por padrão neste endpoint
+            DataCriacao = DateTime.Now
         };
 
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        // Salva no banco de dados
+        _context.Usuarios.Add(novoFuncionario);
+        await _context.SaveChangesAsync();
+
+        return Ok(new {
+            mensagem = "Funcionário cadastrado com sucesso!",
+            usuario = new { novoFuncionario.Nome, novoFuncionario.Email }
+        });
     }
 }
 
 // Modelos para a requisição de login
 public record LoginRequest(string Email, string Senha);
+public record RegistroRequest(string Nome, string Email, string Senha);
