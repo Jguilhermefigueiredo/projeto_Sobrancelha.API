@@ -1,47 +1,249 @@
+
 # =====================
+
 # Build (.NET)
+
 # =====================
+
 bin/
+
 obj/
 
+
+
 # =====================
+
 # Visual Studio
+
 # =====================
+
 .vs/
+
 *.user
+
 *.suo
+
 *.userosscache
+
 *.sln.docstates
 
+
+
 # =====================
+
 # Visual Studio Code
+
 # =====================
+
 .vscode/
 
+
+
 # =====================
+
 # JetBrains Rider
+
 # =====================
+
 .idea/
 
+
+
 # =====================
+
 # NuGet
+
 # =====================
+
 packages/
+
 *.nupkg
 
+
+
 # =====================
+
 # Logs
+
 # =====================
+
 *.log
 
-# =====================
-# Testes
-# =====================
-TestResults/
+
 
 # =====================
-# Sistema Operacional
+
+# Testes
+
 # =====================
+
+TestResults/
+
+
+
+# =====================
+
+# Sistema Operacional
+
+# =====================
+
 .DS_Store
+
 Thumbs.db
+
 Models/shape_predictor_68_face_landmarks.dat
+
+
+
+# =====================
+
+# Banco de Dados Local (SQLite)
+
+# =====================
+
+*.db
+
+*.db-shm
+
+*.db-wal
+
+
+
+# =====================
+
+# Configurações Sensíveis
+
+# =====================
+
+appsettings.Development.json
+
+# =====================
+# Armazenamento de Imagens (Uploads de Teste)
+# =====================
+SombrancelhaApp.Api/Storage/
+SombrancelhaApp.Api/Infrastructure/Images/*.jpg
+SombrancelhaApp.Api/Infrastructure/Images/*.png
+# =====================
+
+# Build (.NET)
+
+# =====================
+
+bin/
+
+obj/
+
+
+
+# =====================
+
+# Visual Studio
+
+# =====================
+
+.vs/
+
+*.user
+
+*.suo
+
+*.userosscache
+
+*.sln.docstates
+
+
+
+# =====================
+
+# Visual Studio Code
+
+# =====================
+
+.vscode/
+
+
+
+# =====================
+
+# JetBrains Rider
+
+# =====================
+
+.idea/
+
+
+
+# =====================
+
+# NuGet
+
+# =====================
+
+packages/
+
+*.nupkg
+
+
+
+# =====================
+
+# Logs
+
+# =====================
+
+*.log
+
+
+
+# =====================
+
+# Testes
+
+# =====================
+
+TestResults/
+
+
+
+# =====================
+
+# Sistema Operacional
+
+# =====================
+
+.DS_Store
+
+Thumbs.db
+
+Models/shape_predictor_68_face_landmarks.dat
+
+
+
+# =====================
+
+# Banco de Dados Local (SQLite)
+
+# =====================
+
+*.db
+
+*.db-shm
+
+*.db-wal
+
+
+
+# =====================
+
+# Configurações Sensíveis
+
+# =====================
+
+appsettings.Development.json
+
+# =====================
+# Armazenamento de Imagens (Uploads de Teste)
+# =====================
+SombrancelhaApp.Api/Storage/
+SombrancelhaApp.Api/Infrastructure/Images/*.jpg
+SombrancelhaApp.Api/Infrastructure/Images/*.png
