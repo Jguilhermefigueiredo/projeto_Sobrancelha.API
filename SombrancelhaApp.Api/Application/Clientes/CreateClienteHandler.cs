@@ -1,7 +1,6 @@
 using MediatR;
 using SombrancelhaApp.Api.Domain;
 using SombrancelhaApp.Api.Repositories;
-using Microsoft.EntityFrameworkCore;
 
 namespace SombrancelhaApp.Api.Application.Clientes.CreateCliente;
 
@@ -15,7 +14,8 @@ public class CreateClienteHandler
         _repository = repository;
     }
 
-    public Task<Guid> Handle(
+    // Adicionado o modificador 'async'
+    public async Task<Guid> Handle(
         CreateClienteCommand request,
         CancellationToken cancellationToken)
     {
@@ -25,8 +25,10 @@ public class CreateClienteHandler
             request.Telefone
         );
 
-        _repository.Add(cliente);
+        // Agora aguardamos a operação assíncrona do repositório
+        await _repository.AddAsync(cliente);
 
-        return Task.FromResult(cliente.Id);
+        // Retornamos o ID diretamente, o C# empacota em uma Task automaticamente por causa do 'async'
+        return cliente.Id;
     }
 }

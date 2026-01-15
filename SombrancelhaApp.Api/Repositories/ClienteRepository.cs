@@ -2,7 +2,6 @@ using SombrancelhaApp.Api.Domain;
 using SombrancelhaApp.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-
 namespace SombrancelhaApp.Api.Repositories;
 
 public class ClienteRepository : IClienteRepository
@@ -14,40 +13,55 @@ public class ClienteRepository : IClienteRepository
         _context = context;
     }
 
-    public void Add(Cliente cliente)
+    // 1. Métodos Assíncronos evitam que a API "trave" sob carga
+    public async Task AddAsync(Cliente cliente)
     {
-        //Console.WriteLine("DB EM USO: " + _context.Database.GetDbConnection().DataSource);
-        _context.Clientes.Add(cliente);
-        _context.SaveChanges();
+        await _context.Clientes.AddAsync(cliente);
+        await _context.SaveChangesAsync();
     }
 
-    // Update persistido no banco
-    public void Update(Cliente cliente)
+    public async Task UpdateAsync(Cliente cliente)
     {
         _context.Clientes.Update(cliente);
-        _context.SaveChanges();
+        await _context.SaveChangesAsync();
     }
-    //delete
-    public void Delete(Cliente cliente)
+
+    public async Task DeleteAsync(Cliente cliente)
     {
-    _context.Clientes.Remove(cliente);
-    _context.SaveChanges();
+        _context.Clientes.Remove(cliente);
+        await _context.SaveChangesAsync();
     }
 
-    
-
-    public Cliente? GetById(Guid id)
+    public async Task<Cliente?> GetByIdAsync(Guid id)
     {
-        return _context.Clientes.FirstOrDefault(c => c.Id == id);
+        return await _context.Clientes.FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    public IEnumerable<Cliente> GetAll()
+    // 2. A "Mágica" para o Swagger: Busca com Filtro e Paginação
+    public async Task<(IEnumerable<Cliente> Items, int TotalCount)> GetPagedAsync(string? nome, int page, int pageSize)
     {
-        return _context.Clientes.ToList();
+        var query = _context.Clientes.AsQueryable();
+
+        // Filtro por nome (ignore maiúsculas/minúsculas)
+        if (!string.IsNullOrWhiteSpace(nome))
+        {
+            query = query.Where(c => c.Nome.ToLower().Contains(nome.ToLower()));
+        }
+
+        var totalCount = await query.CountAsync();
+        
+        var items = await query
+            .OrderBy(c => c.Nome)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
     }
 
+    // Mantemos o Query para casos de uso específicos
     public IQueryable<Cliente> Query()
     {
-        return _context.Clientes.AsQueryable();
+        return _context.Clientes.AsNoTracking().AsQueryable();
     }
 }

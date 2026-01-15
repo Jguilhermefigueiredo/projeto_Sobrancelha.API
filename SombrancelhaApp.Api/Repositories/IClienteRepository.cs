@@ -4,10 +4,16 @@ namespace SombrancelhaApp.Api.Repositories;
 
 public interface IClienteRepository
 {
-    void Add(Cliente cliente);
-    void Update(Cliente cliente);
-    void Delete(Cliente cliente);
-    Cliente? GetById(Guid id);
-    IEnumerable<Cliente> GetAll();
+    // Métodos de Escrita (Assíncronos)
+    Task AddAsync(Cliente cliente);
+    Task UpdateAsync(Cliente cliente);
+    Task DeleteAsync(Cliente cliente);
+
+    // Métodos de Leitura
+    Task<Cliente?> GetByIdAsync(Guid id);
+    
+    // Este é o método que permite o filtro por nome no Swagger
+    Task<(IEnumerable<Cliente> Items, int TotalCount)> GetPagedAsync(string? nome, int page, int pageSize);
+
     IQueryable<Cliente> Query();
 }

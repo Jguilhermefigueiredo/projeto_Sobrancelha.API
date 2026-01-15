@@ -28,22 +28,24 @@ public class ClienteImagemController : ControllerBase
         _env = env;
     }
 
-
     [HttpPost("{imagemId:guid}/detectar-sobrancelha")]
-    public IActionResult DetectarSobrancelha(Guid clienteId, Guid imagemId, [FromBody] ProcessarSimulacaoDto dto)
+    // CORREÇÃO 1: Adicionado 'async Task<'
+    public async Task<IActionResult> DetectarSobrancelha(Guid clienteId, Guid imagemId, [FromBody] ProcessarSimulacaoDto dto)
     {
-        var cliente = _clienteRepository.GetById(clienteId);
+        // CORREÇÃO 2: Alterado de _repository para _clienteRepository e adicionado await
+        var cliente = await _clienteRepository.GetByIdAsync(clienteId);
         if (cliente == null) return NotFound("Cliente não encontrado");
 
+        // Assumindo que o repositório de imagens ainda é síncrono. 
+        // Se der erro, mude para: await _clienteImagemRepository.GetByIdAsync(imagemId);
         var imagem = _clienteImagemRepository.GetById(imagemId);
         if (imagem == null) return NotFound("Imagem não encontrada");
 
         try 
         {
-            // O serviço agora retorna uma STRING (caminho do arquivo final)
-            // Passamos: clienteId.ToString(), caminhoOriginal, nomeMolde e corHex (se existir no DTO)
-            var corParaAplicar = "#3B2F2F"; // Valor padrão ou venha de dto.CorHex  DTO
+            var corParaAplicar = "#3B2F2F"; 
             
+            // Este serviço parece ser síncrono (processamento de CPU), então não precisa de await
             var caminhoFinal = _processamentoImagemService.ProcessarFluxoCompleto(
                 clienteId.ToString(), 
                 imagem.Caminho, 
@@ -54,11 +56,9 @@ public class ClienteImagemController : ControllerBase
             if (string.IsNullOrEmpty(caminhoFinal))
                 return BadRequest("Não foi possível gerar a simulação.");
 
-            // --- LÓGICA DE URL ACESSÍVEL ---
             var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
             var nomeArquivoFinal = Path.GetFileName(caminhoFinal);
 
-            // Importante: Como o ProcessarFluxoCompleto agora salva na pasta Storage/Atendimentos,
             var urlSimulacao = $"{baseUrl}/visualizar-imagens/atendimentos/{clienteId}/{nomeArquivoFinal}";
 
             return Ok(new
