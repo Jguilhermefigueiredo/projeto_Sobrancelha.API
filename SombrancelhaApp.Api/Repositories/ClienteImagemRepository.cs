@@ -12,6 +12,17 @@ public class ClienteImagemRepository : IClienteImagemRepository
         _context = context;
     }
 
+    public async Task AddAsync(ClienteImagem imagem)
+    {
+        await _context.ClienteImagens.AddAsync(imagem);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<ClienteImagem?> GetByIdAsync(Guid id)
+    {
+        return await _context.ClienteImagens.FindAsync(id);
+    }
+
     public void Add(ClienteImagem imagem)
     {
         _context.ClienteImagens.Add(imagem);

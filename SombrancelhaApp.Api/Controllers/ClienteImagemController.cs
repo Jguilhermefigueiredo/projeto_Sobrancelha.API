@@ -28,24 +28,71 @@ public class ClienteImagemController : ControllerBase
         _env = env;
     }
 
+    /// <summary>
+    /// Realiza o upload de uma foto para um cliente específico.
+    /// </summary>
+    [HttpPost("upload")]
+    [Consumes("multipart/form-data")] //formulário de arquivo
+    public async Task<IActionResult> Upload(Guid clienteId, IFormFile arquivo)
+    {
+        if (arquivo == null || arquivo.Length == 0) 
+            return BadRequest("O arquivo de imagem é obrigatório.");
+
+        var cliente = await _clienteRepository.GetByIdAsync(clienteId);
+        if (cliente == null) 
+            return NotFound("Cliente não encontrado.");
+
+        // Define e garante a existência do diretório de armazenamento
+        string storagePath = Path.Combine(_env.ContentRootPath, "Storage");
+        if (!Directory.Exists(storagePath)) 
+            Directory.CreateDirectory(storagePath);
+
+        // Gera um nome único para evitar conflitos de arquivos
+        var nomeArquivo = $"{Guid.NewGuid()}{Path.GetExtension(arquivo.FileName)}";
+        var caminhoCompleto = Path.Combine(storagePath, nomeArquivo);
+
+        using (var stream = new FileStream(caminhoCompleto, FileMode.Create))
+        {
+            await arquivo.CopyToAsync(stream);
+        }
+
+        // Persiste a referência da imagem no banco de dados
+        var novaImagem = new ClienteImagem 
+{ 
+        Id = Guid.NewGuid(),
+        ClienteId = clienteId,
+        Caminho = caminhoCompleto,
+        CriadoEm = DateTime.UtcNow
+};
+
+        // Nota: Certifique-se que seu repositório possui o método AddAsync
+        await _clienteImagemRepository.AddAsync(novaImagem);
+
+        return Ok(new 
+        { 
+            imagemId = novaImagem.Id, 
+            mensagem = "Upload realizado com sucesso.",
+            nomeArquivo = nomeArquivo
+        });
+    }
+
+    /// <summary>
+    /// Processa a simulação de sobrancelha em uma imagem já existente.
+    /// </summary>
     [HttpPost("{imagemId:guid}/detectar-sobrancelha")]
-    // CORREÇÃO 1: Adicionado 'async Task<'
     public async Task<IActionResult> DetectarSobrancelha(Guid clienteId, Guid imagemId, [FromBody] ProcessarSimulacaoDto dto)
     {
-        // CORREÇÃO 2: Alterado de _repository para _clienteRepository e adicionado await
         var cliente = await _clienteRepository.GetByIdAsync(clienteId);
-        if (cliente == null) return NotFound("Cliente não encontrado");
+        if (cliente == null) return NotFound("Cliente não encontrado.");
 
-        // Assumindo que o repositório de imagens ainda é síncrono. 
-        // Se der erro, mude para: await _clienteImagemRepository.GetByIdAsync(imagemId);
-        var imagem = _clienteImagemRepository.GetById(imagemId);
-        if (imagem == null) return NotFound("Imagem não encontrada");
+        var imagem = await _clienteImagemRepository.GetByIdAsync(imagemId);
+        if (imagem == null) return NotFound("Imagem não encontrada.");
 
         try 
         {
+            // Cor padrão para a aplicação (pode ser customizada via DTO futuramente)
             var corParaAplicar = "#3B2F2F"; 
             
-            // Este serviço parece ser síncrono (processamento de CPU), então não precisa de await
             var caminhoFinal = _processamentoImagemService.ProcessarFluxoCompleto(
                 clienteId.ToString(), 
                 imagem.Caminho, 
@@ -54,24 +101,24 @@ public class ClienteImagemController : ControllerBase
             );
 
             if (string.IsNullOrEmpty(caminhoFinal))
-                return BadRequest("Não foi possível gerar a simulação.");
+                return BadRequest("Falha ao gerar a simulação da sobrancelha.");
 
+            // Constrói a URL pública para acesso à imagem processada
             var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
             var nomeArquivoFinal = Path.GetFileName(caminhoFinal);
-
-            var urlSimulacao = $"{baseUrl}/visualizar-imagens/atendimentos/{clienteId}/{nomeArquivoFinal}";
+            var urlSimulacao = $"{baseUrl}/visualizar-imagens-atendimentos/{nomeArquivoFinal}";
 
             return Ok(new
             {
                 imagemOriginalId = imagem.Id,
                 moldeAplicado = dto.NomeMolde,
-                mensagem = "Simulação gerada com sucesso",
-                urlSimulacao = urlSimulacao
+                urlSimulacao = urlSimulacao,
+                mensagem = "Simulação concluída com sucesso."
             });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Erro no processamento: {ex.Message}");
+            return StatusCode(500, $"Erro interno durante o processamento: {ex.Message}");
         }
     }
 }

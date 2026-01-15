@@ -14,20 +14,13 @@ using SombrancelhaApp.Api.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Força o carregamento dos segredos em modo de desenvolvimento
+// --- 1. CONFIGURAÇÕES DE SEGURANÇA (JWT) ---
 if (builder.Environment.IsDevelopment())
 {
     builder.Configuration.AddUserSecrets<Program>();
 }
 
-// se o valor for o placeholder ou nulo, usa a chave de teste
-var chaveJwt = builder.Configuration["Jwt:ChaveSecreta"];
-
-if (string.IsNullOrEmpty(chaveJwt) || chaveJwt == "ConfigurarNoServidor")
-{
-    chaveJwt = "Chave_Temporaria_Para_Teste_32_Caracteres!";
-}
-
+var chaveJwt = builder.Configuration["Jwt:ChaveSecreta"] ?? "Chave_Temporaria_Para_Teste_32_Caracteres!";
 var key = Encoding.ASCII.GetBytes(chaveJwt);
 
 builder.Services.AddAuthentication(x =>
@@ -52,59 +45,56 @@ builder.Services.AddAuthorization(options => {
     options.AddPolicy("Master", policy => policy.RequireRole("Master"));
 });
 
-// --- 2. SERVIÇOS DO SISTEMA ---
+// --- 2. SERVIÇOS DO SISTEMA E IA ---
 builder.Services.AddControllers()
-    .AddFluentValidation(fv =>
-    {
-        fv.RegisterValidatorsFromAssemblyContaining<CreateClienteDtoValidator>();
-    });
+    .AddFluentValidation(fv => fv.RegisterValidatorsFromAssemblyContaining<CreateClienteDtoValidator>());
 
-// Injeção de Dependências - Imagem e IA
+// META 2.1: IA como SINGLETON (Performance Crítica)
+// Serviços que carregam modelos pesados devem ser Singletons
+builder.Services.AddSingleton<IDeteccaoFacialService, DeteccaoFacialService>();
+builder.Services.AddSingleton<IDeteccaoSobrancelhaService, DeteccaoSobrancelhaService>();
+builder.Services.AddSingleton<IIaService, IaService>(); 
+
+// Serviços de fluxo podem ser Scoped ou Singleton
 builder.Services.AddScoped<INormalizacaoService, NormalizacaoService>();
-builder.Services.AddScoped<IIaService, IaService>();
 builder.Services.AddScoped<IProcessamentoImagemService, ProcessamentoImagemService>();
 builder.Services.AddScoped<IRemocaoSobrancelhaService, RemocaoSobrancelhaService>();
 builder.Services.AddScoped<ISubstituicaoSobrancelhaService, SubstituicaoSobrancelhaService>();
-builder.Services.AddScoped<IDeteccaoSobrancelhaService, DeteccaoSobrancelhaService>();
-builder.Services.AddScoped<IDeteccaoFacialService, DeteccaoFacialService>();
 
-// Background Services
+// Background Services e Repositórios
 builder.Services.AddHostedService<LimpezaArquivosService>();
-
-// Banco de Dados e Repositórios
 builder.Services.AddScoped<IClienteImagemRepository, ClienteImagemRepository>();
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? "Data Source=SobrancelhaApp.db")
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=SobrancelhaApp.db")
 );
 
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 
-// --- 3. SWAGGER COM SUPORTE A JWT ---
+// --- 3. CORS (Para o Front-end conseguir conectar) ---
+builder.Services.AddCors(options => {
+    options.AddPolicy("AppPolicy", policy => {
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+    });
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "SobrancelhaApp API", Version = "v1" });
-
-    // Adiciona o campo de "Authorize" no Swagger
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header usando o esquema Bearer. Exemplo: \"Authorization: Bearer {token}\"",
+        Description = "JWT Authorization header usando Bearer. Exemplo: \"Authorization: Bearer {token}\"",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
-
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
             Array.Empty<string>()
         }
     });
@@ -112,64 +102,60 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// --- 4. CICLO DE VIDA E DATA SEEDING ---
+// --- 4. TRATAMENTO DE ERRO GLOBAL (Deve ser o primeiro middleware) ---
+app.UseExceptionHandler(errorApp => {
+    errorApp.Run(async context => {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        var feature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+        await context.Response.WriteAsJsonAsync(new { 
+            mensagem = "Erro interno no servidor de Simulação.",
+            detalhe = feature?.Error.Message 
+        });
+    });
+});
+
+// --- 5. BANCO DE DADOS E SEEDING ---
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var db = services.GetRequiredService<AppDbContext>();
-    
-    // Roda Migrações
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
-
-    // SCRIPT DE PRIMEIRO ACESSO: Cria o Master se o banco estiver vazio
     if (!db.Usuarios.Any())
     {
-        var senhaHashed = BCrypt.Net.BCrypt.HashPassword("Admin123!"); // Mude ao subir
-        db.Usuarios.Add(new Usuario
-        {
+        db.Usuarios.Add(new Usuario {
             Nome = "Administrador Master",
             Email = "admin@sistema.com",
-            SenhaHash = senhaHashed,
+            SenhaHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
             Perfil = PerfilUsuario.Master
         });
         db.SaveChanges();
     }
 }
 
-// --- 5. MIDDLEWARES E ARQUIVOS ESTÁTICOS ---
+// --- 6. ARQUIVOS ESTÁTICOS E PIPELINE ---
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Imagens de Cadastro
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(
-        Path.Combine(builder.Environment.ContentRootPath, "Infrastructure", "Images")),
+app.UseStaticFiles(new StaticFileOptions {
+    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Infrastructure", "Images")),
     RequestPath = "/visualizar-imagens"
 });
 
-// Imagens de Atendimentos (Storage)
 string storagePath = Path.Combine(builder.Environment.ContentRootPath, "Storage");
 if (!Directory.Exists(storagePath)) Directory.CreateDirectory(storagePath);
 
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(storagePath),
-    RequestPath = "/visualizar-imagens-atendimentos",
-    OnPrepareResponse = ctx => {
-        ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=604800");
-    }
+app.UseStaticFiles(new StaticFileOptions {
+    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "Storage")),
+    RequestPath = "/visualizar-imagens-atendimentos"
 });
 
+app.UseCors("AppPolicy"); // Ativar antes da Autenticação
 app.UseHttpsRedirection();
-
-// A ordem aqui importa: Autenticação antes de Autorização
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

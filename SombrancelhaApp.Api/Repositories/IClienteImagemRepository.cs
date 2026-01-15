@@ -8,4 +8,7 @@ public interface IClienteImagemRepository
     IEnumerable<ClienteImagem> GetByClienteId(Guid clienteId);
 
     ClienteImagem? GetById(Guid id);// pipeline de processamento/detecção
+
+    Task AddAsync(ClienteImagem imagem);
+    Task<ClienteImagem?> GetByIdAsync(Guid id);
 }
